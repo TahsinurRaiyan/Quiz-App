@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chatty Quiz Pro Max</title>
+
+<style>
+body {
+    background: #0a0b1a;
+    color: white;
+    font-family: Arial;
+    display: flex;
+    justify-content: center;
+}
+
+#app {
+    width: 470px;
+    height: 700px;
+    background: #1a1b2e;
+    border-radius: 15px;
+    padding: 10px;
+    overflow-y: auto;
+    box-shadow: 0 0 20px #00e5ff;
+}
+
+.msg {
+    margin: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    max-width: 85%;
+}
+
+.bot { background: #22254b; }
+.user { background: #00e5ff; color: black; text-align: right; }
+
+button {
+    margin: 5px;
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover { transform: scale(1.05); }
+
+input, select {
+    padding: 8px;
+    border-radius: 8px;
+    border: none;
+    margin: 5px;
+}
+
+#progressBar {
+    width: 100%;
+    background: #333;
+    border-radius: 10px;
+    margin: 10px 0;
+}
+
+#progress {
+    height: 10px;
+    width: 0%;
+    background: #00e5ff;
+    border-radius: 10px;
+    transition: 0.3s;
+}
+</style>
+
+</head>
+
+<body>
+
+<div>
+
+<div id="app"></div>
+
+<div id="setup">
+<input id="name" placeholder="Enter your name">
+
+<select id="category">
+<option value="science">Science</option>
+<option value="sports">Sports</option>
+<option value="general">General</option>
+</select>
+
+<button onclick="start()">Start Exam</button>
+
+<p id="limitText"></p>
+</div>
+
+<div id="choices"></div>
+
+<div id="progressBar">
+<div id="progress"></div>
+</div>
+
+<div style="text-align:center;">
+Q: <span id="qno">0</span>/10 |
+⏳ <span id="time">300</span>
+</div>
+
+<button onclick="submitQuiz()">📩 Submit</button>
+<button onclick="showLeaderboard()">🏆 Leaderboard</button>
+
+</div>
+
+<script>
+
+let name="";
+let qIndex=0;
+let score=0;
+let userAns=[];
+let currentQuiz=[];
+let locked=false;
+
+const bank = {
+
+science: [
+["Gas most in air?",["Oxygen","Nitrogen","CO2","Hydrogen"],"Nitrogen"],
+["Resistance unit?",["Volt","Ohm","Ampere","Watt"],"Ohm"],
+["No charge particle?",["Proton","Electron","Neutron","Photon"],"Neutron"],
+["Speed of light?",["3×10^8","3×10^6","3×10^5","3×10^7"],"3×10^8"],
+["Blood purifier?",["Heart","Liver","Kidney","Lungs"],"Kidney"]
+],
+
+sports: [
+["Volleyball players?",["5","6","7","8"],"6"],
+["Football match?",["80","90","100","70"],"90"],
+["Olympic rings?",["4","5","6","7"],"5"],
+["Cricket WC?",["2","3","4","5"],"4"],
+["Marathon?",["21","42","50","30"],"42"]
+],
+
+general: [
+["Hamlet writer?",["Shakespeare","Dickens","Tolstoy","Homer"],"Shakespeare"],
+["Largest desert?",["Sahara","Gobi","Antarctic","Arabian"],"Antarctic"],
+["Most population?",["India","USA","China","Russia"],"China"],
+["Binary 10?",["1010","1001","1100","1110"],"1010"],
+["Smallest prime?",["0","1","2","3"],"2"]
+]
+};
+
+// 🧠 RANDOM ENGINE
+function getRandomQuiz(cat){
+
+    let pool=[...bank[cat]];
+
+    for(let i=pool.length-1;i>0;i--){
+        let j=Math.floor(Math.random()*(i+1));
+        [pool[i],pool[j]]=[pool[j],pool[i]];
+    }
+
+    return pool.slice(0,10);
+}
+
+// UI
+function addMsg(t,type){
+    let d=document.createElement("div");
+    d.className="msg "+type;
+    d.innerText=t;
+    app.appendChild(d);
+    app.scrollTop=app.scrollHeight;
+}
+
+// DATE
+function getToday(){
+    return new Date().toDateString();
+}
+
+// USER LIMIT SYSTEM
+function getUserData(){
+    let data = JSON.parse(localStorage.getItem(name)) || {
+        date:getToday(),
+        count:0
+    };
+
+    if(data.date !== getToday()){
+        data.date=getToday();
+        data.count=0;
+    }
+
+    return data;
+}
+
+function saveUserData(data){
+    localStorage.setItem(name,JSON.stringify(data));
+}
+
+// START
+function start(){
+
+    name=document.getElementById("name").value;
+    let cat=document.getElementById("category").value;
+
+    if(!name) return alert("Enter name!");
+
+    let data=getUserData();
+
+    if(data.count>=3){
+        alert("❌ 3 exams already used today!");
+        return;
+    }
+
+    data.count++;
+    saveUserData(data);
+
+    currentQuiz=getRandomQuiz(cat);
+
+    document.getElementById("setup").style.display="none";
+
+    document.getElementById("limitText").innerText=
+    "Exams today: "+data.count+"/3";
+
+    addMsg("🤖 Welcome "+name+"!", "bot");
+
+    showQ();
+}
+
+// PROGRESS
+function updateProgress(){
+    let p=(qIndex/currentQuiz.length)*100;
+    document.getElementById("progress").style.width=p+"%";
+}
+
+// QUESTION
+function showQ(){
+
+    if(qIndex>=currentQuiz.length){
+        endQuiz();
+        return;
+    }
+
+    let q=currentQuiz[qIndex];
+
+    app.innerHTML="";
+    addMsg("Q"+(qIndex+1)+": "+q[0],"bot");
+
+    let c=document.getElementById("choices");
+    c.innerHTML="";
+
+    q[1].forEach(opt=>{
+        let b=document.createElement("button");
+        b.innerText=opt;
+        b.onclick=()=>answer(opt);
+        c.appendChild(b);
+    });
+
+    qIndex++;
+    document.getElementById("qno").innerText=qIndex;
+
+    updateProgress();
+}
+
+// ANSWER
+function answer(opt){
+
+    if(locked) return;
+
+    userAns.push(opt);
+
+    addMsg(name+": "+opt,"user");
+
+    setTimeout(showQ,400);
+}
+
+// SUBMIT
+function submitQuiz(){
+
+    if(!confirm("Are you sure you want to submit?")) return;
+
+    locked=true;
+    clearInterval(timer);
+
+    endQuiz();
+}
+
+// END
+function endQuiz(){
+
+    document.getElementById("choices").innerHTML="";
+
+    score=0;
+
+    for(let i=0;i<currentQuiz.length;i++){
+        if(userAns[i]===currentQuiz[i][2]) score++;
+    }
+
+    showBadge();
+    saveBoard(name,score);
+    showReview();
+}
+
+// BADGES
+function showBadge(){
+
+    if(score>=8) addMsg("🏆 Genius Badge","bot");
+    else if(score>=6) addMsg("🔥 Smart Badge","bot");
+    else addMsg("📘 Learner Badge","bot");
+}
+
+// REVIEW
+function showReview(){
+
+    addMsg("🎯 Review Mode","bot");
+
+    for(let i=0;i<currentQuiz.length;i++){
+        addMsg(
+            "Q"+(i+1)+
+            " | Ans: "+currentQuiz[i][2]+
+            " | You: "+(userAns[i]||"None"),
+            "bot"
+        );
+    }
+
+    addMsg("🏁 Score: "+score+"/5","bot");
+}
+
+// LEADERBOARD
+function saveBoard(n,s){
+
+    let data=JSON.parse(localStorage.getItem("board"))||[];
+
+    data.push({name:n,score:s});
+
+    localStorage.setItem("board",JSON.stringify(data));
+}
+
+function showLeaderboard(){
+
+    app.innerHTML="";
+
+    let data=JSON.parse(localStorage.getItem("board"))||[];
+
+    data.sort((a,b)=>b.score-a.score);
+
+    addMsg("🏆 Leaderboard","bot");
+
+    data.slice(0,10).forEach((p,i)=>{
+        addMsg((i+1)+". "+p.name+" - "+p.score,"bot");
+    });
+
+    let b=document.createElement("button");
+    b.innerText="Back";
+    b.onclick=()=>location.reload();
+    app.appendChild(b);
+}
+
+// TIMER
+let t=300;
+
+let timer=setInterval(()=>{
+    t--;
+    document.getElementById("time").innerText=t;
+
+    if(t<=0){
+        submitQuiz();
+    }
+},1000);
+
+</script>
+
+</body>
+</html>
